@@ -43,3 +43,12 @@
 .insighthub-stats-box p:last-child {
     margin-bottom: 0;
 }
+
+.insighthub-table {
+    margin-top: 12px;
+}
+
+.insighthub-woocommerce ul {
+    margin: 0;
+    padding-left: 20px;
+}
