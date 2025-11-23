@@ -10,6 +10,7 @@ namespace InsightHub;
 defined( 'ABSPATH' ) || exit;
 
 require_once plugin_dir_path( __FILE__ ) . 'class-insighthub-stats-service.php';
+require_once plugin_dir_path( __FILE__ ) . 'class-insighthub-integration-manager.php';
 require_once plugin_dir_path( __FILE__ ) . 'class-insighthub-admin-page.php';
 require_once plugin_dir_path( __FILE__ ) . 'class-insighthub-shortcodes.php';
 
@@ -32,6 +33,13 @@ class Plugin {
      * @var Stats_Service
      */
     private $stats_service;
+
+    /**
+     * Integration manager instance.
+     *
+     * @var Integration_Manager
+     */
+    private $integration_manager;
 
     /**
      * Admin page handler.
@@ -71,10 +79,11 @@ class Plugin {
      * Plugin constructor.
      */
     private function __construct() {
-        $this->plugin_file  = dirname( __DIR__ ) . '/insighthub.php';
-        $this->stats_service = new Stats_Service();
-        $this->admin_page    = new Admin_Page( $this->stats_service );
-        $this->shortcodes    = new Shortcodes( $this->stats_service );
+        $this->plugin_file          = dirname( __DIR__ ) . '/insighthub.php';
+        $this->stats_service        = new Stats_Service();
+        $this->integration_manager  = new Integration_Manager();
+        $this->admin_page           = new Admin_Page( $this->stats_service, $this->integration_manager );
+        $this->shortcodes           = new Shortcodes( $this->stats_service );
 
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_assets' ] );
     }
