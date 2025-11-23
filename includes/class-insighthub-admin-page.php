@@ -97,66 +97,118 @@ class Admin_Page {
         $tools              = $this->integration_manager->get_tools();
         ?>
         <div class="wrap insighthub-dashboard">
-            <h1><?php esc_html_e( 'InsightHub Dashboard', 'insighthub' ); ?></h1>
+            <div class="insighthub-hero">
+                <div>
+                    <p class="insighthub-hero__eyebrow"><?php esc_html_e( 'WordPress Insights', 'insighthub' ); ?></p>
+                    <h1><?php esc_html_e( 'InsightHub Dashboard', 'insighthub' ); ?></h1>
+                    <p class="insighthub-hero__lede"><?php esc_html_e( 'Monitor content performance, recent activity, and integration health in one place.', 'insighthub' ); ?></p>
+                </div>
+                <div class="insighthub-hero__meta">
+                    <span class="insighthub-badge">
+                        <span class="dashicons dashicons-clock" aria-hidden="true"></span>
+                        <?php echo esc_html( sprintf( __( 'Updated %s', 'insighthub' ), date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ) ); ?>
+                    </span>
+                    <span class="insighthub-badge">
+                        <span class="dashicons dashicons-shield-alt" aria-hidden="true"></span>
+                        <?php esc_html_e( 'Secure admin view', 'insighthub' ); ?>
+                    </span>
+                </div>
+            </div>
 
             <?php $this->render_notices(); ?>
 
-            <div class="insighthub-cards">
-                <div class="card">
-                    <h2><?php esc_html_e( 'Total Posts', 'insighthub' ); ?></h2>
-                    <p class="insighthub-number"><?php echo esc_html( number_format_i18n( $totals['posts'] ) ); ?></p>
+            <div class="insighthub-stats-grid" role="list">
+                <div class="insighthub-stat" role="listitem">
+                    <div class="insighthub-stat__label">
+                        <span><?php esc_html_e( 'Total Posts', 'insighthub' ); ?></span>
+                        <span class="dashicons dashicons-media-text" aria-hidden="true"></span>
+                    </div>
+                    <p class="insighthub-stat__value"><?php echo esc_html( number_format_i18n( $totals['posts'] ) ); ?></p>
                 </div>
-                <div class="card">
-                    <h2><?php esc_html_e( 'Total Pages', 'insighthub' ); ?></h2>
-                    <p class="insighthub-number"><?php echo esc_html( number_format_i18n( $totals['pages'] ) ); ?></p>
+                <div class="insighthub-stat" role="listitem">
+                    <div class="insighthub-stat__label">
+                        <span><?php esc_html_e( 'Total Pages', 'insighthub' ); ?></span>
+                        <span class="dashicons dashicons-media-default" aria-hidden="true"></span>
+                    </div>
+                    <p class="insighthub-stat__value"><?php echo esc_html( number_format_i18n( $totals['pages'] ) ); ?></p>
                 </div>
-                <div class="card">
-                    <h2><?php esc_html_e( 'Total Comments', 'insighthub' ); ?></h2>
-                    <p class="insighthub-number"><?php echo esc_html( number_format_i18n( $totals['comments'] ) ); ?></p>
+                <div class="insighthub-stat" role="listitem">
+                    <div class="insighthub-stat__label">
+                        <span><?php esc_html_e( 'Total Comments', 'insighthub' ); ?></span>
+                        <span class="dashicons dashicons-admin-comments" aria-hidden="true"></span>
+                    </div>
+                    <p class="insighthub-stat__value"><?php echo esc_html( number_format_i18n( $totals['comments'] ) ); ?></p>
                 </div>
-                <div class="card">
-                    <h2><?php esc_html_e( 'Total Users', 'insighthub' ); ?></h2>
-                    <p class="insighthub-number"><?php echo esc_html( number_format_i18n( $totals['users'] ) ); ?></p>
+                <div class="insighthub-stat" role="listitem">
+                    <div class="insighthub-stat__label">
+                        <span><?php esc_html_e( 'Total Users', 'insighthub' ); ?></span>
+                        <span class="dashicons dashicons-admin-users" aria-hidden="true"></span>
+                    </div>
+                    <p class="insighthub-stat__value"><?php echo esc_html( number_format_i18n( $totals['users'] ) ); ?></p>
                 </div>
-                <div class="card">
-                    <h2><?php esc_html_e( 'Categories', 'insighthub' ); ?></h2>
-                    <p class="insighthub-number"><?php echo esc_html( number_format_i18n( $totals['categories'] ) ); ?></p>
+                <div class="insighthub-stat" role="listitem">
+                    <div class="insighthub-stat__label">
+                        <span><?php esc_html_e( 'Categories', 'insighthub' ); ?></span>
+                        <span class="dashicons dashicons-category" aria-hidden="true"></span>
+                    </div>
+                    <p class="insighthub-stat__value"><?php echo esc_html( number_format_i18n( $totals['categories'] ) ); ?></p>
                 </div>
-                <div class="card">
-                    <h2><?php esc_html_e( 'Tags', 'insighthub' ); ?></h2>
-                    <p class="insighthub-number"><?php echo esc_html( number_format_i18n( $totals['tags'] ) ); ?></p>
+                <div class="insighthub-stat" role="listitem">
+                    <div class="insighthub-stat__label">
+                        <span><?php esc_html_e( 'Tags', 'insighthub' ); ?></span>
+                        <span class="dashicons dashicons-tag" aria-hidden="true"></span>
+                    </div>
+                    <p class="insighthub-stat__value"><?php echo esc_html( number_format_i18n( $totals['tags'] ) ); ?></p>
                 </div>
             </div>
 
-            <div class="card insighthub-recent-activity">
-                <h2><?php esc_html_e( 'Recent Activity', 'insighthub' ); ?></h2>
-                <ul>
-                    <li>
-                        <strong><?php esc_html_e( 'Posts in last 7 days:', 'insighthub' ); ?></strong>
-                        <?php echo esc_html( number_format_i18n( $recent_activity['posts_7_days'] ) ); ?>
-                    </li>
-                    <li>
-                        <strong><?php esc_html_e( 'Posts in last 30 days:', 'insighthub' ); ?></strong>
-                        <?php echo esc_html( number_format_i18n( $recent_activity['posts_30_days'] ) ); ?>
-                    </li>
-                    <li>
-                        <strong><?php esc_html_e( 'Comments in last 7 days:', 'insighthub' ); ?></strong>
-                        <?php echo esc_html( number_format_i18n( $recent_activity['comments_7_days'] ) ); ?>
-                    </li>
-                    <li>
-                        <strong><?php esc_html_e( 'Comments in last 30 days:', 'insighthub' ); ?></strong>
-                        <?php echo esc_html( number_format_i18n( $recent_activity['comments_30_days'] ) ); ?>
-                    </li>
-                </ul>
+            <div class="insighthub-grid-2">
+                <section class="insighthub-panel" aria-labelledby="insighthub-recent-activity">
+                    <div class="insighthub-panel__header">
+                        <h2 id="insighthub-recent-activity"><?php esc_html_e( 'Recent Activity', 'insighthub' ); ?></h2>
+                        <span class="insighthub-chip"><?php esc_html_e( 'Rolling 30 days', 'insighthub' ); ?></span>
+                    </div>
+                    <ul>
+                        <li>
+                            <strong><?php esc_html_e( 'Posts in last 7 days:', 'insighthub' ); ?></strong>
+                            <?php echo esc_html( number_format_i18n( $recent_activity['posts_7_days'] ) ); ?>
+                        </li>
+                        <li>
+                            <strong><?php esc_html_e( 'Posts in last 30 days:', 'insighthub' ); ?></strong>
+                            <?php echo esc_html( number_format_i18n( $recent_activity['posts_30_days'] ) ); ?>
+                        </li>
+                        <li>
+                            <strong><?php esc_html_e( 'Comments in last 7 days:', 'insighthub' ); ?></strong>
+                            <?php echo esc_html( number_format_i18n( $recent_activity['comments_7_days'] ) ); ?>
+                        </li>
+                        <li>
+                            <strong><?php esc_html_e( 'Comments in last 30 days:', 'insighthub' ); ?></strong>
+                            <?php echo esc_html( number_format_i18n( $recent_activity['comments_30_days'] ) ); ?>
+                        </li>
+                    </ul>
+                </section>
+
+                <section class="insighthub-panel" aria-labelledby="insighthub-chart-trends">
+                    <div class="insighthub-panel__header">
+                        <h2 id="insighthub-chart-trends"><?php esc_html_e( 'Engagement Overview', 'insighthub' ); ?></h2>
+                        <span class="insighthub-chip"><?php esc_html_e( 'Charts placeholder', 'insighthub' ); ?></span>
+                    </div>
+                    <div class="insighthub-chart-placeholder" role="img" aria-label="<?php esc_attr_e( 'Chart placeholder for engagement trends', 'insighthub' ); ?>">
+                        <?php esc_html_e( 'Charts will appear here when connected tools share data.', 'insighthub' ); ?>
+                    </div>
+                </section>
             </div>
 
-            <div class="card">
-                <h2><?php esc_html_e( 'Post Type Totals', 'insighthub' ); ?></h2>
-                <table class="widefat striped insighthub-table">
+            <section class="insighthub-panel" aria-labelledby="insighthub-post-types">
+                <div class="insighthub-panel__header">
+                    <h2 id="insighthub-post-types"><?php esc_html_e( 'Post Type Totals', 'insighthub' ); ?></h2>
+                    <span class="insighthub-chip"><?php esc_html_e( 'Published items', 'insighthub' ); ?></span>
+                </div>
+                <table class="widefat insighthub-table">
                     <thead>
                         <tr>
-                            <th><?php esc_html_e( 'Post Type', 'insighthub' ); ?></th>
-                            <th><?php esc_html_e( 'Published Count', 'insighthub' ); ?></th>
+                            <th scope="col"><?php esc_html_e( 'Post Type', 'insighthub' ); ?></th>
+                            <th scope="col"><?php esc_html_e( 'Published Count', 'insighthub' ); ?></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -168,11 +220,14 @@ class Admin_Page {
                     <?php endforeach; ?>
                     </tbody>
                 </table>
-            </div>
+            </section>
 
             <?php if ( ! empty( $woocommerce_totals ) ) : ?>
-                <div class="card insighthub-woocommerce">
-                    <h2><?php esc_html_e( 'WooCommerce (last 30 days)', 'insighthub' ); ?></h2>
+                <section class="insighthub-panel" aria-labelledby="insighthub-woocommerce">
+                    <div class="insighthub-panel__header">
+                        <h2 id="insighthub-woocommerce"><?php esc_html_e( 'WooCommerce (last 30 days)', 'insighthub' ); ?></h2>
+                        <span class="insighthub-chip"><?php esc_html_e( 'Storefront signals', 'insighthub' ); ?></span>
+                    </div>
                     <ul>
                         <li>
                             <strong><?php esc_html_e( 'Orders:', 'insighthub' ); ?></strong>
@@ -183,40 +238,34 @@ class Admin_Page {
                             <?php echo esc_html( wc_price( $woocommerce_totals['sales_total'] ) ); ?>
                         </li>
                     </ul>
-                </div>
+                </section>
             <?php endif; ?>
 
-            <div class="card insighthub-integrations">
-                <h2><?php esc_html_e( 'Marketing Integrations', 'insighthub' ); ?></h2>
-                <p><?php esc_html_e( 'Connect your marketing tools to pull key insights into InsightHub.', 'insighthub' ); ?></p>
-                <table class="widefat striped insighthub-table">
-                    <thead>
-                        <tr>
-                            <th><?php esc_html_e( 'Tool', 'insighthub' ); ?></th>
-                            <th><?php esc_html_e( 'Status', 'insighthub' ); ?></th>
-                            <th><?php esc_html_e( 'Latest Data', 'insighthub' ); ?></th>
-                            <th><?php esc_html_e( 'Action', 'insighthub' ); ?></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    <?php foreach ( $tools as $slug => $tool ) :
-                        $connected = $this->integration_manager->is_connected( $slug );
-                        $client    = $this->integration_manager->get_client( $slug );
-                        $data      = is_wp_error( $client ) ? [] : $client->fetch_latest_data();
-                        ?>
-                        <tr>
-                            <td>
-                                <strong><?php echo esc_html( $tool['label'] ); ?></strong>
-                                <p class="description"><?php echo esc_html( $tool['description'] ); ?></p>
-                            </td>
-                            <td>
+            <section class="insighthub-panel insighthub-integrations" aria-labelledby="insighthub-integrations-heading">
+                <div class="insighthub-panel__header">
+                    <h2 id="insighthub-integrations-heading"><?php esc_html_e( 'Marketing Integrations', 'insighthub' ); ?></h2>
+                    <span class="insighthub-chip"><?php esc_html_e( 'Connection center', 'insighthub' ); ?></span>
+                </div>
+                <p class="insighthub-tools__intro"><?php esc_html_e( 'Connect your marketing tools to pull key insights into InsightHub. Focus styles and contrast help keep actions accessible.', 'insighthub' ); ?></p>
+                <?php foreach ( $tools as $slug => $tool ) :
+                    $connected = $this->integration_manager->is_connected( $slug );
+                    $client    = $this->integration_manager->get_client( $slug );
+                    $data      = is_wp_error( $client ) ? [] : $client->fetch_latest_data();
+                    ?>
+                    <div class="insighthub-tool">
+                        <div class="insighthub-tool__row">
+                            <div>
+                                <p class="insighthub-tool__title"><?php echo esc_html( $tool['label'] ); ?></p>
+                                <p class="insighthub-tool__description"><?php echo esc_html( $tool['description'] ); ?></p>
+                            </div>
+                            <div>
                                 <?php if ( $connected ) : ?>
-                                    <span class="status-connected"><?php esc_html_e( 'Connected', 'insighthub' ); ?></span>
+                                    <span class="insighthub-tool__status status-connected"><?php esc_html_e( 'Connected', 'insighthub' ); ?></span>
                                 <?php else : ?>
-                                    <span class="status-disconnected"><?php esc_html_e( 'Not connected', 'insighthub' ); ?></span>
+                                    <span class="insighthub-tool__status status-disconnected"><?php esc_html_e( 'Not connected', 'insighthub' ); ?></span>
                                 <?php endif; ?>
-                            </td>
-                            <td>
+                            </div>
+                            <div class="insighthub-tool__data">
                                 <?php if ( ! empty( $data ) ) : ?>
                                     <ul>
                                         <?php foreach ( $data as $key => $value ) : ?>
@@ -226,8 +275,8 @@ class Admin_Page {
                                 <?php else : ?>
                                     <span class="description"><?php esc_html_e( 'Connect to start syncing data.', 'insighthub' ); ?></span>
                                 <?php endif; ?>
-                            </td>
-                            <td>
+                            </div>
+                            <div class="insighthub-actions">
                                 <?php if ( $connected ) : ?>
                                     <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
                                         <input type="hidden" name="action" value="insighthub_disconnect_tool" />
@@ -243,12 +292,11 @@ class Admin_Page {
                                         <button class="button button-primary" type="submit"><?php esc_html_e( 'Connect', 'insighthub' ); ?></button>
                                     </form>
                                 <?php endif; ?>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </section>
         </div>
         <?php
     }
