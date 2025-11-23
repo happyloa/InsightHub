@@ -79,8 +79,10 @@ class Admin_Page {
             wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'insighthub' ) );
         }
 
-        $totals          = $this->stats_service->get_totals();
-        $recent_activity = $this->stats_service->get_recent_activity();
+        $totals             = $this->stats_service->get_totals();
+        $recent_activity    = $this->stats_service->get_recent_activity();
+        $post_type_totals   = $this->stats_service->get_post_type_totals();
+        $woocommerce_totals = $this->stats_service->get_woocommerce_activity( 30 );
         ?>
         <div class="wrap insighthub-dashboard">
             <h1><?php esc_html_e( 'InsightHub Dashboard', 'insighthub' ); ?></h1>
@@ -101,6 +103,14 @@ class Admin_Page {
                 <div class="card">
                     <h2><?php esc_html_e( 'Total Users', 'insighthub' ); ?></h2>
                     <p class="insighthub-number"><?php echo esc_html( number_format_i18n( $totals['users'] ) ); ?></p>
+                </div>
+                <div class="card">
+                    <h2><?php esc_html_e( 'Categories', 'insighthub' ); ?></h2>
+                    <p class="insighthub-number"><?php echo esc_html( number_format_i18n( $totals['categories'] ) ); ?></p>
+                </div>
+                <div class="card">
+                    <h2><?php esc_html_e( 'Tags', 'insighthub' ); ?></h2>
+                    <p class="insighthub-number"><?php echo esc_html( number_format_i18n( $totals['tags'] ) ); ?></p>
                 </div>
             </div>
 
@@ -125,6 +135,42 @@ class Admin_Page {
                     </li>
                 </ul>
             </div>
+
+            <div class="card">
+                <h2><?php esc_html_e( 'Post Type Totals', 'insighthub' ); ?></h2>
+                <table class="widefat striped insighthub-table">
+                    <thead>
+                        <tr>
+                            <th><?php esc_html_e( 'Post Type', 'insighthub' ); ?></th>
+                            <th><?php esc_html_e( 'Published Count', 'insighthub' ); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ( $post_type_totals as $post_type => $data ) : ?>
+                        <tr>
+                            <td><?php echo esc_html( $data['label'] ); ?></td>
+                            <td><?php echo esc_html( number_format_i18n( $data['count'] ) ); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <?php if ( ! empty( $woocommerce_totals ) ) : ?>
+                <div class="card insighthub-woocommerce">
+                    <h2><?php esc_html_e( 'WooCommerce (last 30 days)', 'insighthub' ); ?></h2>
+                    <ul>
+                        <li>
+                            <strong><?php esc_html_e( 'Orders:', 'insighthub' ); ?></strong>
+                            <?php echo esc_html( number_format_i18n( $woocommerce_totals['orders'] ) ); ?>
+                        </li>
+                        <li>
+                            <strong><?php esc_html_e( 'Sales Total:', 'insighthub' ); ?></strong>
+                            <?php echo esc_html( wc_price( $woocommerce_totals['sales_total'] ) ); ?>
+                        </li>
+                    </ul>
+                </div>
+            <?php endif; ?>
         </div>
         <?php
     }
