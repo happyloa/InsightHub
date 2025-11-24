@@ -71,8 +71,44 @@ class Integration_Manager {
     public function get_connection( $tool ) {
         $connections = get_option( self::OPTION_NAME, [] );
 
-        if ( isset( $connections[ $tool ] ) && is_array( $connections[ $tool ] ) ) {
-            return $connections[ $tool ];
+        if ( ! isset( $connections[ $tool ] ) ) {
+            return null;
+        }
+
+        $connection = $connections[ $tool ];
+        $updated    = false;
+
+        // Migrate legacy string tokens into the new structured format.
+        if ( is_string( $connection ) ) {
+            $connection = [
+                'credentials' => [ 'token' => $connection ],
+                'metadata'    => [],
+            ];
+            $updated    = true;
+        }
+
+        if ( is_array( $connection ) ) {
+            if ( ! isset( $connection['credentials'] ) ) {
+                $connection['credentials'] = [];
+                $updated                   = true;
+            }
+
+            if ( ! isset( $connection['metadata'] ) || ! is_array( $connection['metadata'] ) ) {
+                $connection['metadata'] = [];
+                $updated                = true;
+            }
+
+            if ( ! isset( $connection['stored_at'] ) ) {
+                $connection['stored_at'] = current_time( 'timestamp' );
+                $updated                 = true;
+            }
+
+            if ( $updated ) {
+                $connections[ $tool ] = $connection;
+                update_option( self::OPTION_NAME, $connections, false );
+            }
+
+            return $connection;
         }
 
         return null;
