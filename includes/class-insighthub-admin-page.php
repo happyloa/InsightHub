@@ -54,6 +54,7 @@ class Admin_Page {
         add_action( 'admin_menu', [ $this, 'register_menu' ] );
         add_action( 'admin_post_insighthub_connect_tool', [ $this, 'handle_connect_tool' ] );
         add_action( 'admin_post_insighthub_disconnect_tool', [ $this, 'handle_disconnect_tool' ] );
+        add_action( 'admin_post_insighthub_oauth_callback', [ $this, 'handle_oauth_callback' ] );
     }
 
     /**
@@ -249,8 +250,9 @@ class Admin_Page {
                 <p class="insighthub-tools__intro"><?php esc_html_e( 'Connect your marketing tools to pull key insights into InsightHub. Focus styles and contrast help keep actions accessible.', 'insighthub' ); ?></p>
                 <?php foreach ( $tools as $slug => $tool ) :
                     $connected = $this->integration_manager->is_connected( $slug );
-                    $client    = $this->integration_manager->get_client( $slug );
-                    $data      = is_wp_error( $client ) ? [] : $client->fetch_latest_data();
+                    $metadata  = $this->integration_manager->get_connection_metadata( $slug );
+                    $client    = $connected ? $this->integration_manager->get_client( $slug ) : null;
+                    $data      = ( $connected && ! is_wp_error( $client ) ) ? $client->fetch_latest_data() : [];
                     ?>
                     <div class="insighthub-tool">
                         <div class="insighthub-tool__row">
@@ -266,13 +268,21 @@ class Admin_Page {
                                 <?php endif; ?>
                             </div>
                             <div class="insighthub-tool__data">
+                                <?php if ( $connected && ! empty( $metadata ) ) : ?>
+                                    <ul>
+                                        <?php foreach ( $metadata as $key => $value ) : ?>
+                                            <li><strong><?php echo esc_html( ucwords( str_replace( '_', ' ', $key ) ) ); ?>:</strong> <?php echo esc_html( $value ); ?></li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                <?php endif; ?>
+
                                 <?php if ( ! empty( $data ) ) : ?>
                                     <ul>
                                         <?php foreach ( $data as $key => $value ) : ?>
-                                            <li><strong><?php echo esc_html( ucfirst( $key ) ); ?>:</strong> <?php echo esc_html( is_array( $value ) ? wp_json_encode( $value ) : $value ); ?></li>
+                                            <li><strong><?php echo esc_html( ucwords( str_replace( '_', ' ', $key ) ) ); ?>:</strong> <?php echo esc_html( is_array( $value ) ? wp_json_encode( $value ) : $value ); ?></li>
                                         <?php endforeach; ?>
                                     </ul>
-                                <?php else : ?>
+                                <?php elseif ( ! $connected ) : ?>
                                     <span class="description"><?php esc_html_e( 'Connect to start syncing data.', 'insighthub' ); ?></span>
                                 <?php endif; ?>
                             </div>
@@ -285,11 +295,24 @@ class Admin_Page {
                                         <button class="button button-secondary" type="submit"><?php esc_html_e( 'Disconnect', 'insighthub' ); ?></button>
                                     </form>
                                 <?php else : ?>
-                                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+                                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="insighthub-connect-form">
                                         <input type="hidden" name="action" value="insighthub_connect_tool" />
                                         <input type="hidden" name="tool" value="<?php echo esc_attr( $slug ); ?>" />
                                         <?php wp_nonce_field( 'insighthub_connect_' . $slug ); ?>
-                                        <button class="button button-primary" type="submit"><?php esc_html_e( 'Connect', 'insighthub' ); ?></button>
+
+                                        <?php if ( 'activecampaign' === $slug ) : ?>
+                                            <label class="screen-reader-text" for="insighthub-api-url-<?php echo esc_attr( $slug ); ?>"><?php esc_html_e( 'ActiveCampaign API URL', 'insighthub' ); ?></label>
+                                            <input id="insighthub-api-url-<?php echo esc_attr( $slug ); ?>" name="api_url" type="url" class="regular-text" placeholder="https://youraccount.api-us1.com" required />
+                                            <label class="screen-reader-text" for="insighthub-api-key-<?php echo esc_attr( $slug ); ?>"><?php esc_html_e( 'ActiveCampaign API Key', 'insighthub' ); ?></label>
+                                            <input id="insighthub-api-key-<?php echo esc_attr( $slug ); ?>" name="api_key" type="password" class="regular-text" placeholder="API key" required />
+                                        <?php elseif ( 'clarity' === $slug ) : ?>
+                                            <label class="screen-reader-text" for="insighthub-project-id-<?php echo esc_attr( $slug ); ?>"><?php esc_html_e( 'Clarity Project ID', 'insighthub' ); ?></label>
+                                            <input id="insighthub-project-id-<?php echo esc_attr( $slug ); ?>" name="project_id" type="text" class="regular-text" placeholder="Project ID" required />
+                                            <label class="screen-reader-text" for="insighthub-project-key-<?php echo esc_attr( $slug ); ?>"><?php esc_html_e( 'Clarity Project Key', 'insighthub' ); ?></label>
+                                            <input id="insighthub-project-key-<?php echo esc_attr( $slug ); ?>" name="project_key" type="text" class="regular-text" placeholder="Project key" required />
+                                        <?php endif; ?>
+
+                                        <button class="button button-primary" type="submit"><?php echo 'google_site_kit' === $slug ? esc_html__( 'Connect with Google', 'insighthub' ) : esc_html__( 'Validate & Connect', 'insighthub' ); ?></button>
                                     </form>
                                 <?php endif; ?>
                             </div>
@@ -311,8 +334,22 @@ class Admin_Page {
 
         $tool = isset( $_POST['tool'] ) ? sanitize_key( wp_unslash( $_POST['tool'] ) ) : '';
         check_admin_referer( 'insighthub_connect_' . $tool );
+        $payload = [];
 
-        $result = $this->integration_manager->connect_tool( $tool );
+        if ( 'activecampaign' === $tool ) {
+            $payload['api_url'] = isset( $_POST['api_url'] ) ? esc_url_raw( wp_unslash( $_POST['api_url'] ) ) : '';
+            $payload['api_key'] = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
+        } elseif ( 'clarity' === $tool ) {
+            $payload['project_id']  = isset( $_POST['project_id'] ) ? sanitize_text_field( wp_unslash( $_POST['project_id'] ) ) : '';
+            $payload['project_key'] = isset( $_POST['project_key'] ) ? sanitize_text_field( wp_unslash( $_POST['project_key'] ) ) : '';
+        }
+
+        $result = $this->integration_manager->connect_tool( $tool, $payload );
+
+        if ( is_array( $result ) && isset( $result['redirect'] ) ) {
+            wp_safe_redirect( $result['redirect'] );
+            exit;
+        }
 
         $notice = is_wp_error( $result ) ? 'connect_error' : 'connected';
         $redirect = add_query_arg(
@@ -342,6 +379,34 @@ class Admin_Page {
         $result = $this->integration_manager->disconnect_tool( $tool );
 
         $notice = is_wp_error( $result ) ? 'disconnect_error' : 'disconnected';
+        $redirect = add_query_arg(
+            [
+                'page'               => self::MENU_SLUG,
+                'insighthub_notice'  => $notice,
+                'insighthub_tool'    => $tool,
+            ],
+            admin_url( 'admin.php' )
+        );
+
+        wp_safe_redirect( $redirect );
+        exit;
+    }
+
+    /**
+     * Handle OAuth callback for Google Site Kit.
+     */
+    public function handle_oauth_callback() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'insighthub' ) );
+        }
+
+        $tool  = isset( $_GET['tool'] ) ? sanitize_key( wp_unslash( $_GET['tool'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        $code  = isset( $_GET['code'] ) ? sanitize_text_field( wp_unslash( $_GET['code'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        $state = isset( $_GET['state'] ) ? sanitize_text_field( wp_unslash( $_GET['state'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+        $result = $this->integration_manager->handle_oauth_callback( $tool, $code, $state );
+        $notice = is_wp_error( $result ) ? 'connect_error' : 'connected';
+
         $redirect = add_query_arg(
             [
                 'page'               => self::MENU_SLUG,
