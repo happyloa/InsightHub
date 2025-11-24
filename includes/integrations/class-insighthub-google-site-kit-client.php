@@ -7,6 +7,8 @@
 
 namespace InsightHub\Integrations;
 
+use WP_Error;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -118,5 +120,22 @@ class Google_Site_Kit_Client {
             ],
             'token_expires_at'     => $this->expires_at,
         ];
+    }
+
+    /**
+     * Validate access and refresh tokens are present.
+     *
+     * @return bool|WP_Error
+     */
+    public function validate_connection() {
+        if ( empty( $this->access_token ) || empty( $this->refresh_token ) ) {
+            return new WP_Error( 'missing_tokens', __( 'Google authorization tokens are missing. Reconnect to continue.', 'insighthub' ) );
+        }
+
+        if ( $this->expires_at > 0 && $this->expires_at <= time() ) {
+            $this->maybe_refresh_token();
+        }
+
+        return true;
     }
 }
