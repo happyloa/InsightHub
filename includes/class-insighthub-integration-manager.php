@@ -103,6 +103,16 @@ class Integration_Manager {
                 $updated                 = true;
             }
 
+            if ( ! isset( $connection['validation'] ) || ! is_array( $connection['validation'] ) ) {
+                $connection['validation'] = [
+                    'status'         => 'unknown',
+                    'checked_at'     => null,
+                    'last_success_at' => null,
+                    'message'        => '',
+                ];
+                $updated                   = true;
+            }
+
             if ( $updated ) {
                 $connections[ $tool ] = $connection;
                 update_option( self::OPTION_NAME, $connections, false );
@@ -122,7 +132,9 @@ class Integration_Manager {
      * @return bool
      */
     public function is_connected( $tool ) {
-        return null !== $this->get_connection( $tool );
+        $validation = $this->get_validation_state( $tool );
+
+        return ( null !== $this->get_connection( $tool ) && 'success' === $validation['status'] );
     }
 
     /**
@@ -159,8 +171,10 @@ class Integration_Manager {
                 }
 
                 $metadata = $client->get_connection_metadata();
-                $this->persist_connection(
+
+                $result = $this->finalize_connection(
                     $tool,
+                    $client,
                     [
                         'credentials' => [
                             'api_url' => $api_url,
@@ -170,7 +184,7 @@ class Integration_Manager {
                     ]
                 );
 
-                return true;
+                return is_wp_error( $result ) ? $result : true;
 
             case 'clarity':
                 $project_id  = isset( $data['project_id'] ) ? $data['project_id'] : '';
@@ -186,8 +200,10 @@ class Integration_Manager {
                 }
 
                 $metadata = $client->get_connection_metadata();
-                $this->persist_connection(
+
+                $result = $this->finalize_connection(
                     $tool,
+                    $client,
                     [
                         'credentials' => [
                             'project_id'  => $project_id,
@@ -197,7 +213,7 @@ class Integration_Manager {
                     ]
                 );
 
-                return true;
+                return is_wp_error( $result ) ? $result : true;
         }
 
         return new WP_Error( 'invalid_handler', __( 'Unable to connect with the provided tool.', 'insighthub' ) );
@@ -277,15 +293,16 @@ class Integration_Manager {
         $credentials  = $client->exchange_code_for_tokens( $code );
         $metadata     = $client->get_connection_metadata();
 
-        $this->persist_connection(
+        $result = $this->finalize_connection(
             $tool,
+            $client,
             [
                 'credentials' => $credentials,
                 'metadata'    => $metadata,
             ]
         );
 
-        return true;
+        return is_wp_error( $result ) ? $result : true;
     }
 
     /**
@@ -306,6 +323,59 @@ class Integration_Manager {
     }
 
     /**
+     * Get validation state for the integration.
+     *
+     * @param string $tool Tool slug.
+     *
+     * @return array<string, mixed>
+     */
+    public function get_validation_state( $tool ) {
+        $connection = $this->get_connection( $tool );
+
+        if ( isset( $connection['validation'] ) && is_array( $connection['validation'] ) ) {
+            return wp_parse_args(
+                $connection['validation'],
+                [
+                    'status'          => 'unknown',
+                    'checked_at'      => null,
+                    'last_success_at' => null,
+                    'message'         => '',
+                ]
+            );
+        }
+
+        return [
+            'status'          => 'unknown',
+            'checked_at'      => null,
+            'last_success_at' => null,
+            'message'         => '',
+        ];
+    }
+
+    /**
+     * Record a successful sync or validation for the integration.
+     *
+     * @param string $tool    Tool slug.
+     * @param string $message Optional message to store alongside the validation.
+     */
+    public function mark_successful_sync( $tool, $message = '' ) {
+        $connection = $this->get_connection( $tool );
+
+        if ( null === $connection ) {
+            return;
+        }
+
+        $connection = $this->apply_validation_result(
+            $tool,
+            $connection,
+            true,
+            $message ?: __( 'Validation refreshed from dashboard.', 'insighthub' )
+        );
+
+        $this->persist_connection( $tool, $connection );
+    }
+
+    /**
      * Persist the connection data in the database.
      *
      * @param string               $tool       Tool slug.
@@ -313,10 +383,91 @@ class Integration_Manager {
      */
     private function persist_connection( $tool, array $connection ) {
         $connections         = get_option( self::OPTION_NAME, [] );
-        $connection['stored_at'] = current_time( 'timestamp' );
+        $connection['stored_at'] = isset( $connection['stored_at'] ) ? $connection['stored_at'] : ( isset( $connections[ $tool ]['stored_at'] ) ? $connections[ $tool ]['stored_at'] : current_time( 'timestamp' ) );
         $connections[ $tool ] = $connection;
 
         update_option( self::OPTION_NAME, $connections, false );
+    }
+
+    /**
+     * Validate a connection using the provided client and persist the state.
+     *
+     * @param string $tool       Tool slug.
+     * @param object $client     Integration client instance.
+     * @param array  $connection Connection payload.
+     *
+     * @return bool|WP_Error
+     */
+    private function finalize_connection( $tool, $client, array $connection ) {
+        $validation_result = $this->validate_with_client( $tool, $client );
+        $connection        = $this->apply_validation_result( $tool, $connection, $validation_result );
+
+        $this->persist_connection( $tool, $connection );
+
+        return $validation_result;
+    }
+
+    /**
+     * Run a validation call on the integration client when available.
+     *
+     * @param string $tool   Tool slug.
+     * @param object $client Integration client instance.
+     *
+     * @return bool|WP_Error
+     */
+    private function validate_with_client( $tool, $client ) {
+        if ( ! is_object( $client ) ) {
+            return new WP_Error( 'missing_client', __( 'Integration client not available.', 'insighthub' ) );
+        }
+
+        if ( method_exists( $client, 'validate_connection' ) ) {
+            $result = $client->validate_connection();
+
+            if ( is_wp_error( $result ) ) {
+                return $result;
+            }
+
+            if ( ! $result ) {
+                return new WP_Error( 'validation_failed', __( 'The integration could not be validated.', 'insighthub' ) );
+            }
+
+            return true;
+        }
+
+        return true;
+    }
+
+    /**
+     * Append validation metadata to a connection.
+     *
+     * @param string          $tool              Tool slug.
+     * @param array           $connection        Connection payload.
+     * @param bool|WP_Error   $validation_result Validation result to record.
+     * @param string          $message_override  Optional message to override default validation message.
+     *
+     * @return array<string, mixed>
+     */
+    private function apply_validation_result( $tool, array $connection, $validation_result, $message_override = '' ) {
+        $existing            = $this->get_connection( $tool );
+        $previous_validation = [];
+
+        if ( isset( $existing['validation'] ) && is_array( $existing['validation'] ) ) {
+            $previous_validation = $existing['validation'];
+        }
+
+        $timestamp     = current_time( 'timestamp' );
+        $status        = is_wp_error( $validation_result ) ? 'failed' : 'success';
+        $message       = $message_override ?: ( is_wp_error( $validation_result ) ? $validation_result->get_error_message() : __( 'Validation succeeded.', 'insighthub' ) );
+        $last_success  = ( 'success' === $status ) ? $timestamp : ( isset( $previous_validation['last_success_at'] ) ? $previous_validation['last_success_at'] : null );
+
+        $connection['validation'] = [
+            'status'          => $status,
+            'checked_at'      => $timestamp,
+            'last_success_at' => $last_success,
+            'message'         => $message,
+        ];
+
+        return $connection;
     }
 
     /**

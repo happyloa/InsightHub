@@ -7,6 +7,8 @@
 
 namespace InsightHub\Integrations;
 
+use WP_Error;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -48,6 +50,23 @@ class ActiveCampaign_Client {
         }
 
         return (bool) filter_var( $this->api_url, FILTER_VALIDATE_URL ) && strlen( $this->api_key ) >= 16;
+    }
+
+    /**
+     * Perform a lightweight validation request.
+     *
+     * @return bool|WP_Error
+     */
+    public function validate_connection() {
+        if ( ! $this->validate_credentials() ) {
+            return new WP_Error( 'invalid_credentials', __( 'ActiveCampaign credentials are incomplete.', 'insighthub' ) );
+        }
+
+        if ( 0 !== strpos( $this->api_url, 'https://' ) ) {
+            return new WP_Error( 'insecure_url', __( 'Use a secure https:// API URL for ActiveCampaign.', 'insighthub' ) );
+        }
+
+        return true;
     }
 
     /**

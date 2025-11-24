@@ -249,10 +249,18 @@ class Admin_Page {
                 </div>
                 <p class="insighthub-tools__intro"><?php esc_html_e( 'Connect your marketing tools to pull key insights into InsightHub. Focus styles and contrast help keep actions accessible.', 'insighthub' ); ?></p>
                 <?php foreach ( $tools as $slug => $tool ) :
-                    $connected = $this->integration_manager->is_connected( $slug );
-                    $metadata  = $this->integration_manager->get_connection_metadata( $slug );
-                    $client    = $connected ? $this->integration_manager->get_client( $slug ) : null;
-                    $data      = ( $connected && ! is_wp_error( $client ) ) ? $client->fetch_latest_data() : [];
+                    $connection       = $this->integration_manager->get_connection( $slug );
+                    $metadata         = $this->integration_manager->get_connection_metadata( $slug );
+                    $validation       = $this->integration_manager->get_validation_state( $slug );
+                    $connected        = $this->integration_manager->is_connected( $slug );
+                    $needs_attention  = ( 'failed' === $validation['status'] );
+                    $client           = $connection ? $this->integration_manager->get_client( $slug ) : null;
+                    $data             = ( $connected && ! is_wp_error( $client ) ) ? $client->fetch_latest_data() : [];
+
+                    if ( $connected && ! is_wp_error( $client ) ) {
+                        $this->integration_manager->mark_successful_sync( $slug, __( 'Dashboard data refreshed successfully.', 'insighthub' ) );
+                        $validation = $this->integration_manager->get_validation_state( $slug );
+                    }
                     ?>
                     <div class="insighthub-tool">
                         <div class="insighthub-tool__row">
@@ -263,12 +271,24 @@ class Admin_Page {
                             <div>
                                 <?php if ( $connected ) : ?>
                                     <span class="insighthub-tool__status status-connected"><?php esc_html_e( 'Connected', 'insighthub' ); ?></span>
+                                <?php elseif ( $needs_attention ) : ?>
+                                    <span class="insighthub-tool__status status-disconnected"><?php esc_html_e( 'Needs attention', 'insighthub' ); ?></span>
                                 <?php else : ?>
                                     <span class="insighthub-tool__status status-disconnected"><?php esc_html_e( 'Not connected', 'insighthub' ); ?></span>
                                 <?php endif; ?>
+                                <?php if ( $needs_attention ) : ?>
+                                    <span class="insighthub-badge insighthub-badge--warning"><?php esc_html_e( 'Needs attention', 'insighthub' ); ?></span>
+                                <?php endif; ?>
                             </div>
                             <div class="insighthub-tool__data">
-                                <?php if ( $connected && ! empty( $metadata ) ) : ?>
+                                <?php if ( is_wp_error( $client ) ) : ?>
+                                    <div class="notice notice-error inline">
+                                        <p><strong><?php esc_html_e( 'Connection issue:', 'insighthub' ); ?></strong> <?php echo esc_html( $client->get_error_message() ); ?></p>
+                                        <p class="description"><?php esc_html_e( 'Try reconnecting the integration or checking the saved credentials.', 'insighthub' ); ?></p>
+                                    </div>
+                                <?php endif; ?>
+
+                                <?php if ( $connection && ! empty( $metadata ) ) : ?>
                                     <ul>
                                         <?php foreach ( $metadata as $key => $value ) : ?>
                                             <li><strong><?php echo esc_html( ucwords( str_replace( '_', ' ', $key ) ) ); ?>:</strong> <?php echo esc_html( $value ); ?></li>
@@ -282,9 +302,25 @@ class Admin_Page {
                                             <li><strong><?php echo esc_html( ucwords( str_replace( '_', ' ', $key ) ) ); ?>:</strong> <?php echo esc_html( is_array( $value ) ? wp_json_encode( $value ) : $value ); ?></li>
                                         <?php endforeach; ?>
                                     </ul>
+                                <?php elseif ( $needs_attention ) : ?>
+                                    <span class="description"><?php esc_html_e( 'Validation failed. Please review credentials and reconnect.', 'insighthub' ); ?></span>
                                 <?php elseif ( ! $connected ) : ?>
                                     <span class="description"><?php esc_html_e( 'Connect to start syncing data.', 'insighthub' ); ?></span>
                                 <?php endif; ?>
+
+                                <div class="insighthub-validation-meta">
+                                    <?php if ( ! empty( $validation['last_success_at'] ) ) : ?>
+                                        <p class="description"><?php printf( esc_html__( 'Last successful sync: %s', 'insighthub' ), esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $validation['last_success_at'] ) ) ); ?></p>
+                                    <?php endif; ?>
+                                    <?php if ( ! empty( $validation['checked_at'] ) ) : ?>
+                                        <p class="description"><?php printf( esc_html__( 'Last checked: %s', 'insighthub' ), esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $validation['checked_at'] ) ) ); ?></p>
+                                    <?php else : ?>
+                                        <p class="description"><?php esc_html_e( 'Validation has not run yet.', 'insighthub' ); ?></p>
+                                    <?php endif; ?>
+                                    <?php if ( ! empty( $validation['message'] ) ) : ?>
+                                        <p class="description"><?php echo esc_html( $validation['message'] ); ?></p>
+                                    <?php endif; ?>
+                                </div>
                             </div>
                             <div class="insighthub-actions">
                                 <?php if ( $connected ) : ?>

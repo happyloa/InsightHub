@@ -7,6 +7,8 @@
 
 namespace InsightHub\Integrations;
 
+use WP_Error;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -44,6 +46,23 @@ class Clarity_Client {
      */
     public function validate_credentials() {
         return ! empty( $this->project_id ) && ! empty( $this->project_key );
+    }
+
+    /**
+     * Perform a lightweight validation of credentials.
+     *
+     * @return bool|WP_Error
+     */
+    public function validate_connection() {
+        if ( ! $this->validate_credentials() ) {
+            return new WP_Error( 'invalid_credentials', __( 'Clarity credentials are incomplete.', 'insighthub' ) );
+        }
+
+        if ( strlen( $this->project_key ) < 6 ) {
+            return new WP_Error( 'invalid_key', __( 'Clarity project key format looks incorrect.', 'insighthub' ) );
+        }
+
+        return true;
     }
 
     /**
