@@ -96,6 +96,8 @@ class Admin_Page {
         $post_type_totals   = $this->stats_service->get_post_type_totals();
         $woocommerce_totals = $this->stats_service->get_woocommerce_activity( 30 );
         $tools              = $this->integration_manager->get_tools();
+        $sync_status        = $this->integration_manager->get_sync_status();
+        $sync_running       = $this->integration_manager->is_sync_running();
         ?>
         <div class="wrap insighthub-dashboard">
             <div class="insighthub-hero">
@@ -113,6 +115,25 @@ class Admin_Page {
                         <span class="dashicons dashicons-shield-alt" aria-hidden="true"></span>
                         <?php esc_html_e( 'Secure admin view', 'insighthub' ); ?>
                     </span>
+                    <span class="insighthub-badge">
+                        <?php if ( $sync_running ) : ?>
+                            <span class="dashicons dashicons-update spin" aria-hidden="true"></span>
+                            <?php esc_html_e( 'Updating integrations…', 'insighthub' ); ?>
+                        <?php elseif ( isset( $sync_status['ended_at'] ) ) : ?>
+                            <span class="dashicons dashicons-yes" aria-hidden="true"></span>
+                            <?php printf( esc_html__( 'Last refresh: %s', 'insighthub' ), esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $sync_status['ended_at'] ) ) ); ?>
+                        <?php else : ?>
+                            <span class="dashicons dashicons-yes" aria-hidden="true"></span>
+                            <?php esc_html_e( 'Integrations idle', 'insighthub' ); ?>
+                        <?php endif; ?>
+                    </span>
+                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="insighthub-refresh-form">
+                        <input type="hidden" name="action" value="insighthub_refresh_integrations" />
+                        <?php wp_nonce_field( 'insighthub_refresh_now' ); ?>
+                        <button type="submit" class="button button-secondary" <?php disabled( $sync_running ); ?>>
+                            <?php esc_html_e( 'Refresh now', 'insighthub' ); ?>
+                        </button>
+                    </form>
                 </div>
             </div>
 
@@ -254,13 +275,9 @@ class Admin_Page {
                     $validation       = $this->integration_manager->get_validation_state( $slug );
                     $connected        = $this->integration_manager->is_connected( $slug );
                     $needs_attention  = ( 'failed' === $validation['status'] );
-                    $client           = $connection ? $this->integration_manager->get_client( $slug ) : null;
-                    $data             = ( $connected && ! is_wp_error( $client ) ) ? $client->fetch_latest_data() : [];
-
-                    if ( $connected && ! is_wp_error( $client ) ) {
-                        $this->integration_manager->mark_successful_sync( $slug, __( 'Dashboard data refreshed successfully.', 'insighthub' ) );
-                        $validation = $this->integration_manager->get_validation_state( $slug );
-                    }
+                    $summary          = $this->integration_manager->get_cached_summary( $slug );
+                    $cached_at        = isset( $summary['cached_at'] ) ? (int) $summary['cached_at'] : null;
+                    $data             = isset( $summary['data'] ) ? $summary['data'] : [];
                     ?>
                     <div class="insighthub-tool">
                         <div class="insighthub-tool__row">
@@ -281,9 +298,12 @@ class Admin_Page {
                                 <?php endif; ?>
                             </div>
                             <div class="insighthub-tool__data">
-                                <?php if ( is_wp_error( $client ) ) : ?>
+                                <?php
+                                $client_state = $connection ? $this->integration_manager->get_client( $slug ) : null;
+                                if ( is_wp_error( $client_state ) ) :
+                                    ?>
                                     <div class="notice notice-error inline">
-                                        <p><strong><?php esc_html_e( 'Connection issue:', 'insighthub' ); ?></strong> <?php echo esc_html( $client->get_error_message() ); ?></p>
+                                        <p><strong><?php esc_html_e( 'Connection issue:', 'insighthub' ); ?></strong> <?php echo esc_html( $client_state->get_error_message() ); ?></p>
                                         <p class="description"><?php esc_html_e( 'Try reconnecting the integration or checking the saved credentials.', 'insighthub' ); ?></p>
                                     </div>
                                 <?php endif; ?>
@@ -302,10 +322,17 @@ class Admin_Page {
                                             <li><strong><?php echo esc_html( ucwords( str_replace( '_', ' ', $key ) ) ); ?>:</strong> <?php echo esc_html( is_array( $value ) ? wp_json_encode( $value ) : $value ); ?></li>
                                         <?php endforeach; ?>
                                     </ul>
+                                <?php elseif ( $sync_running && $connected ) : ?>
+                                    <span class="description">
+                                        <span class="dashicons dashicons-update spin" aria-hidden="true"></span>
+                                        <?php esc_html_e( 'Updating… pull in progress.', 'insighthub' ); ?>
+                                    </span>
                                 <?php elseif ( $needs_attention ) : ?>
                                     <span class="description"><?php esc_html_e( 'Validation failed. Please review credentials and reconnect.', 'insighthub' ); ?></span>
                                 <?php elseif ( ! $connected ) : ?>
                                     <span class="description"><?php esc_html_e( 'Connect to start syncing data.', 'insighthub' ); ?></span>
+                                <?php else : ?>
+                                    <span class="description"><?php esc_html_e( 'No cached data yet. Try running a refresh.', 'insighthub' ); ?></span>
                                 <?php endif; ?>
 
                                 <div class="insighthub-validation-meta">
@@ -316,6 +343,9 @@ class Admin_Page {
                                         <p class="description"><?php printf( esc_html__( 'Last checked: %s', 'insighthub' ), esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $validation['checked_at'] ) ) ); ?></p>
                                     <?php else : ?>
                                         <p class="description"><?php esc_html_e( 'Validation has not run yet.', 'insighthub' ); ?></p>
+                                    <?php endif; ?>
+                                    <?php if ( $cached_at ) : ?>
+                                        <p class="description"><?php printf( esc_html__( 'Cached at: %s', 'insighthub' ), esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $cached_at ) ) ); ?></p>
                                     <?php endif; ?>
                                     <?php if ( ! empty( $validation['message'] ) ) : ?>
                                         <p class="description"><?php echo esc_html( $validation['message'] ); ?></p>
@@ -472,6 +502,7 @@ class Admin_Page {
             'disconnected'     => __( 'Integration disconnected.', 'insighthub' ),
             'connect_error'    => __( 'Unable to connect. Please try again.', 'insighthub' ),
             'disconnect_error' => __( 'Unable to disconnect. Please try again.', 'insighthub' ),
+            'refresh_queued'   => __( 'Refresh scheduled. Latest summaries will appear shortly.', 'insighthub' ),
         ];
 
         if ( ! isset( $messages[ $notice ] ) ) {
