@@ -25,6 +25,11 @@ require_once plugin_dir_path( __FILE__ ) . 'integrations/class-insighthub-clarit
  */
 class Integration_Manager {
     const OPTION_NAME = 'insighthub_integration_tokens';
+    const CRON_HOOK = 'insighthub_sync_integrations';
+    const SUMMARY_CACHE_PREFIX = 'insighthub_summary_';
+    const SYNC_LOCK_KEY = 'insighthub_sync_lock';
+    const SYNC_STATUS_KEY = 'insighthub_sync_status';
+    const SUMMARY_TTL = 30 * MINUTE_IN_SECONDS;
 
     /**
      * Supported tools definition.
@@ -59,6 +64,26 @@ class Integration_Manager {
      */
     public function get_tools() {
         return $this->tools;
+    }
+
+    /**
+     * Register hooks for background sync and AJAX handlers.
+     */
+    public function register_hooks() {
+        add_action( 'init', [ $this, 'maybe_schedule_background_sync' ] );
+        add_action( self::CRON_HOOK, [ $this, 'run_background_sync' ] );
+
+        add_action( 'wp_ajax_insighthub_refresh_integrations', [ $this, 'handle_ajax_refresh' ] );
+        add_action( 'admin_post_insighthub_refresh_integrations', [ $this, 'handle_manual_refresh' ] );
+    }
+
+    /**
+     * Ensure the recurring cron event exists.
+     */
+    public function maybe_schedule_background_sync() {
+        if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
+            wp_schedule_event( time() + MINUTE_IN_SECONDS, 'hourly', self::CRON_HOOK );
+        }
     }
 
     /**
@@ -125,6 +150,116 @@ class Integration_Manager {
     }
 
     /**
+     * Retrieve cached dashboard summary for a tool.
+     *
+     * @param string $tool Tool slug.
+     *
+     * @return array<string, mixed>
+     */
+    public function get_cached_summary( $tool ) {
+        $cached = get_transient( self::SUMMARY_CACHE_PREFIX . $tool );
+
+        if ( ! is_array( $cached ) ) {
+            return [
+                'data'      => [],
+                'cached_at' => null,
+            ];
+        }
+
+        return wp_parse_args(
+            $cached,
+            [
+                'data'      => [],
+                'cached_at' => null,
+            ]
+        );
+    }
+
+    /**
+     * Cache a dashboard summary payload for the tool.
+     *
+     * @param string               $tool Tool slug.
+     * @param array<string, mixed> $data Summary payload.
+     */
+    public function cache_summary( $tool, array $data ) {
+        set_transient(
+            self::SUMMARY_CACHE_PREFIX . $tool,
+            [
+                'data'      => $data,
+                'cached_at' => current_time( 'timestamp' ),
+            ],
+            self::SUMMARY_TTL
+        );
+    }
+
+    /**
+     * Clear the cached summary for a tool.
+     *
+     * @param string $tool Tool slug.
+     */
+    public function clear_cached_summary( $tool ) {
+        delete_transient( self::SUMMARY_CACHE_PREFIX . $tool );
+    }
+
+    /**
+     * Check if a sync is currently running.
+     *
+     * @return bool
+     */
+    public function is_sync_running() {
+        return (bool) get_transient( self::SYNC_LOCK_KEY );
+    }
+
+    /**
+     * Mark sync running state.
+     *
+     * @param bool $running Whether the sync is running.
+     */
+    private function set_sync_running( $running ) {
+        if ( $running ) {
+            set_transient( self::SYNC_LOCK_KEY, 1, 5 * MINUTE_IN_SECONDS );
+            set_transient( self::SYNC_STATUS_KEY, [
+                'started_at' => current_time( 'timestamp' ),
+                'state'      => 'running',
+            ], 5 * MINUTE_IN_SECONDS );
+            return;
+        }
+
+        delete_transient( self::SYNC_LOCK_KEY );
+        set_transient( self::SYNC_STATUS_KEY, [
+            'ended_at' => current_time( 'timestamp' ),
+            'state'    => 'idle',
+        ], MINUTE_IN_SECONDS );
+    }
+
+    /**
+     * Retrieve the sync status metadata.
+     *
+     * @return array<string, mixed>
+     */
+    public function get_sync_status() {
+        $status = get_transient( self::SYNC_STATUS_KEY );
+
+        return is_array( $status ) ? $status : [ 'state' => 'idle' ];
+    }
+
+    /**
+     * Schedule an immediate sync run.
+     */
+    public function trigger_immediate_sync() {
+        set_transient(
+            self::SYNC_STATUS_KEY,
+            [
+                'state'      => 'queued',
+                'started_at' => current_time( 'timestamp' ),
+            ],
+            5 * MINUTE_IN_SECONDS
+        );
+
+        wp_schedule_single_event( time() + 1, self::CRON_HOOK, [ 'manual' => true ] );
+    }
+
+    /**
      * Determine if a tool is connected.
      *
      * @param string $tool Tool slug.
@@ -184,6 +319,11 @@ class Integration_Manager {
                     ]
                 );
 
+                if ( ! is_wp_error( $result ) ) {
+                    $this->clear_cached_summary( $tool );
+                    $this->trigger_immediate_sync();
+                }
+
                 return is_wp_error( $result ) ? $result : true;
 
             case 'clarity':
@@ -213,6 +353,11 @@ class Integration_Manager {
                     ]
                 );
 
+                if ( ! is_wp_error( $result ) ) {
+                    $this->clear_cached_summary( $tool );
+                    $this->trigger_immediate_sync();
+                }
+
                 return is_wp_error( $result ) ? $result : true;
         }
 
@@ -237,6 +382,8 @@ class Integration_Manager {
             unset( $connections[ $tool ] );
             update_option( self::OPTION_NAME, $connections, false );
         }
+
+        $this->clear_cached_summary( $tool );
 
         return true;
     }
@@ -301,6 +448,11 @@ class Integration_Manager {
                 'metadata'    => $metadata,
             ]
         );
+
+        if ( ! is_wp_error( $result ) ) {
+            $this->clear_cached_summary( $tool );
+            $this->trigger_immediate_sync();
+        }
 
         return is_wp_error( $result ) ? $result : true;
     }
@@ -518,5 +670,74 @@ class Integration_Manager {
         delete_transient( 'insighthub_oauth_state_' . $state );
 
         return ( $stored_tool === $tool );
+    }
+
+    /**
+     * Handle AJAX refresh request.
+     */
+    public function handle_ajax_refresh() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( __( 'Insufficient permissions.', 'insighthub' ) );
+        }
+
+        $this->trigger_immediate_sync();
+        wp_send_json_success( [ 'status' => 'queued' ] );
+    }
+
+    /**
+     * Handle manual refresh form submissions.
+     */
+    public function handle_manual_refresh() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'insighthub' ) );
+        }
+
+        check_admin_referer( 'insighthub_refresh_now' );
+
+        $this->trigger_immediate_sync();
+
+        $redirect = add_query_arg(
+            [
+                'page'              => Admin_Page::MENU_SLUG,
+                'insighthub_notice' => 'refresh_queued',
+            ],
+            admin_url( 'admin.php' )
+        );
+
+        wp_safe_redirect( $redirect );
+        exit;
+    }
+
+    /**
+     * Execute background sync for all connected tools.
+     */
+    public function run_background_sync() {
+        if ( $this->is_sync_running() ) {
+            return;
+        }
+
+        $this->set_sync_running( true );
+
+        foreach ( $this->tools as $slug => $tool ) {
+            if ( ! $this->is_connected( $slug ) ) {
+                $this->clear_cached_summary( $slug );
+                continue;
+            }
+
+            $client = $this->get_client( $slug );
+
+            if ( is_wp_error( $client ) ) {
+                $this->clear_cached_summary( $slug );
+                continue;
+            }
+
+            if ( method_exists( $client, 'fetch_latest_data' ) ) {
+                $data = $client->fetch_latest_data();
+                $this->cache_summary( $slug, is_array( $data ) ? $data : [] );
+                $this->mark_successful_sync( $slug, __( 'Cached summary updated.', 'insighthub' ) );
+            }
+        }
+
+        $this->set_sync_running( false );
     }
 }

@@ -86,6 +86,8 @@ class Plugin {
         $this->shortcodes           = new Shortcodes( $this->stats_service );
 
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_assets' ] );
+
+        $this->integration_manager->register_hooks();
     }
 
     /**
