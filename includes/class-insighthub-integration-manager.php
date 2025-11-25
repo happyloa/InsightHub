@@ -71,7 +71,7 @@ class Integration_Manager {
      */
     public function register_hooks() {
         add_action( 'init', [ $this, 'maybe_schedule_background_sync' ] );
-        add_action( self::CRON_HOOK, [ $this, 'run_background_sync' ] );
+        add_action( self::CRON_HOOK, [ $this, 'run_background_sync' ], 10, 1 );
 
         add_action( 'wp_ajax_insighthub_refresh_integrations', [ $this, 'handle_ajax_refresh' ] );
         add_action( 'admin_post_insighthub_refresh_integrations', [ $this, 'handle_manual_refresh' ] );
@@ -710,8 +710,10 @@ class Integration_Manager {
 
     /**
      * Execute background sync for all connected tools.
+     *
+     * @param array<string, mixed> $args Optional cron args.
      */
-    public function run_background_sync() {
+    public function run_background_sync( $args = [] ) {
         if ( $this->is_sync_running() ) {
             return;
         }
